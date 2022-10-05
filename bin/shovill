@@ -321,10 +321,28 @@ else {
 # Check for zero output or failed assembly
 err("Assembly failed - $asm has zero contigs!") unless -s $asm;
 
+# remove short contigs
+my $seq = read_fasta($asm);
+my $metadata = "sw=$EXE-$asmdir/$VERSION date=".strftime("%Y%m%d",localtime);
+my %len = map { ( $_ => length($seq->{$_}) ) } (keys %{$seq});
+for my $id (sort { $len{$b} <=> $len{$a} } keys %{$seq}) {
+  # spades  >NODE_1_length_114969_cov_29.8803_pilon
+  # megahit >k127_7 flag=0 multi=23.8788 len=22  (I change SPC to _)
+  # skesa   >Contig_2_53.4039
+  $id =~ m/(multi=|cov_|Contig_\d+_)(\d+(\.\d+)?)/; # or err("Could not get coverage of contig: $id");
+  my $cov = $2 || $depth;
+  if ($len{$id} < 1000) {
+    msg("Removing short contig (< $minlen bp): $id");
+    delete $seq->{$id};
+  }
+}
+write_fasta("contigs.1000bp.fa", $seq);
+
 # Correct contigs with Pilon
 my $changes = {};
 
 unless ($nocorr) {
+  my $asm = "contigs.1000bp.fa";
   -r $asm or err("Can not see '$asm' file to correct!");
   msg("Checking for assembly errors in $asm");
   run_cmd("bwa index $asm", "bwa-index");
